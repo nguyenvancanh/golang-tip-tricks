@@ -127,4 +127,182 @@ go test -v
 
 Mặc dù đáy chỉ là tính năng nhỏ, nhưng nó cho phép các lập trình viên kiểm soát rõ ràng hơn với bộ test của họ
 
+## Stubbing Tests 
 
+Việc vấn đề hay gặp phải của các chương trình được viết bằng Go đó là việc thiếu linh hoạt trong quá trinh test do quá trình kiểm tra kiểu nghiêm ngặt của Go trong quá trình test. Đặc điểm của Go đó là các hàm và các struct sẽ phụ thuộc vào các struct khác, điều này sẽ vô cùng khó khăn cho chúng ta khi muốn test độc lập một hàm hay một struct bất kỳ. Xem ví dụ dưới đây, giả sử bạn đang viết 1 ứng dụng Go trong đó truy cập tới Api và xử lý một số logic bên trong
+
+```
+type Worker struct {
+  APIClient *Client
+}
+
+func (w Worker) Work(input string) {
+  // Some work here...
+  result, err := w.APIClient.Update(input)
+  if err != nil {
+    return nil, result
+  }
+  return result, nil
+}
+```
+
+Nhìn qua thì thấy nó có vẻ khá ổn, nhưng khi viết test cho function trên thì nó sẽ thế này
+
+```
+import (
+  "testing"
+)
+
+func TestWork(t *Testing.T) {
+  // Setup test...
+  worker := Worker(&Client{})
+  result, err := worker.Work(input)
+
+  if err != nil {
+    t.Fatalf("Error: %s", err)
+  }
+  // Other assertions...
+}
+
+```
+
+Vấn đề ở đây, là khi bạn gọi hàm Work() ở trên, bên trong nó gọi tới hàm Client.Update(), method mà chúng ta sẽ không test trong hàm này, Chúng ta cần chắc chắn được rằng là hàm Client sẽ gọi đến hàm Update(input). Nếu trong Rail thì việc này khá dễ dàng, bạn có thể sử dụng phương thức. 
+
+```
+expect_any_instance_of(Client).to receive(:update).with(input).and_return(result, nil)
+```
+
+Nhưng chúng ta không thể stub được dễ dàng như vậy được trong Golang, bởi vì Worker và Client được liên kết chặt chẽ, chúng ta không thể test một cái này mà không xây dựng cái còn lại. Hãy cố gắng chỉnh sửa cấu trúc của Worker để nó không phụ thuộc vào cấu trúc của Client. Thay vào đó chúng ta có thể cung cấp cho worker một interface giống với Client có phương thức Update như sau: 
+
+```
+type Worker struct {
+  APIClient DataLayer
+}
+
+type DataLayer interface {
+ Update(string) (string, err)
+}
+```
+
+Với cách này,chúng ta đã tạo ra 1 Client fake để tiến hành test class Worker(). Method test được update lại như sau
+
+```
+import (
+  "testing"
+)
+
+type FakeClient struct {
+  updateCalled bool
+}
+
+func (f *FakeClient) Update (string, error) {
+  f.updateCalled = true
+  return "", nil
+}
+
+func TestWork(t *testing.T) {
+  // Setup test...
+  client := &FakeClient{}
+  worker := Worker(client)
+  _, err := worker.Work(input) // Goes out an hits an API
+
+  if client.updateCalled != true {
+    t.Fatal("Expected Client.Update() to be called")
+  }
+  // Other assertions...
+}
+
+```
+
+Như các bạn có thể thấy bây giờ chúng ta sẽ dùng class Clien Fake, để veryfi hoạt động của phương thức Worker()
+
+## Benchmarking
+
+Trong Go hay bất ngông ngữ lập trình nào khác, Benchmarking dùng để đo độ tối ưu của code. Xem ví dụ sau nhé
+
+```
+func Fib(n int) int {
+  if n < 2 {
+    return n
+  }
+  return Fib(n-1) + Fib(n-2)
+}
+
+import "testing"
+
+func BenchmarkFib(b *testing.B) {
+  for n := 0; n < b.N; n++ {
+    Fib(20) // run the Fib function b.N times
+  }
+}
+```
+
+TRong benchmark tests,function test bắt đầu bằng từ khóa Benchmark và việc gọi test tới function sẽ là testing.B, chứ không phải là testing.T như logic test thông thường. Khi chạy lệnh test bạn có thể gọi
+
+```
+go test -bench=.
+```
+
+Ký tự . là regex để Go có thể hiểu là phương thức test của chúng ta sẽ bench tất cả mọi thứ. Output sẽ là
+
+```
+pkg: farisj/mypackage/fib
+BenchmarkFib-4 30000 49477 ns/op
+PASS
+ok farisj/mypackage/fib 1.996s
+```
+
+##. Delve package 
+
+Go cung cấp cho chúng ta 1 package để debug với tên **Delve**. Bạn có thể tham khảo thêm doc về package này nhé nhưng cơ bản nó sẽ hoạt động như sau
+
+```
+func (user User) String() string {
+  return fmt.Sprintf("%s %s", user.First, user.Last)
+}
+
+func main() {
+  names := []string{
+    "Steven",
+    "Connie",
+    "Onion",
+  }
+  for index := 0; index < 3; index++ {
+    name := names[index]
+    message := Hello(name, index == 0)
+    fmt.Printf(message)
+  }
+}
+
+func Hello(name string, firstTime bool) string {
+  if firstTime {
+    return fmt.Sprintf("Hello %s. You're first!\n", name)
+  }
+  return fmt.Sprintf("Hello %s. Happy to see you!\n", name)
+}
+```
+
+Thực hiện lệnh bằng cách
+
+```
+dlv debug ./main.go
+```
+Output sẽ là
+
+```
+(dlv) continue
+> main.Hello() ./main.go:25 (hits goroutine(1):1 total:1) (PC: 0x1088ffb)
+    20: message := Hello(name, index == 0)
+    21: fmt.Printf(message)
+    22: }
+    23: }
+    24:
+=> 25: func Hello(name string, firstTime bool) string {
+    26: if firstTime {
+    27: return fmt.Sprintf("Hello %s. You're first!\n", name)
+    28: }
+    29: return fmt.Sprintf("Hello %s. Happy to see you!\n", name)
+    30: }
+```
+
+Ch
