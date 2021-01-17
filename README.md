@@ -50,3 +50,81 @@ type Admin struct {
   Permissions map[string]string
 }
 ```
+
+Trong ví dụ trên, chúng ta có 2 đối tượng là User và Admin, trong đó Admin có thuộc tính là User cùng với Permissions. Nếu bạn muốn truy vấn tới tên của Admin, thì bạn cần gọi _.User.Name_
+
+Tuy nhiên, hãy xem xét việc xóa một từ trong ví dụ trước, điều này sẽ làm thay đổi toàn bộ phương thức của đối tượng Admin:
+
+```
+type User struct {
+  Name string
+}
+
+type Admin struct {
+  User
+  Permissions map[string]string
+}
+```
+
+Bạn có để ý tới điều này, thuộc tính User đã được bỏ đi. Điều này có nghĩa là bạn có thể tha chiếu tới tên của Admin thông qua phương thức, admin.Name, không cần gọi trung gian thông qua User. Việc này giúp cho code của chúng ta trở nên gọn gàng hơn, nó chắc chắn sẽ được cho share methods và việc giữ cho code của bạn "clean"
+
+Một cách sử dụng bổ sung khác của kiểu này được gọi là "Composing", bao gồm việc sử dụng nhiều kiểu khác nhau để tạo ra một kiểu mới hoàn toàn. Một ví dụ điển hình đó là  thư viện Read/Write
+
+```
+type ReadWriter interface {
+    Reader
+    Writer
+}
+```
+Chúng ta có thể thấy từ định nghĩa trên là với interface ReadWriter, chúng ta có thể gọi tất các các methods được định nghĩa trong các class Read + Write, được định nghĩa ở những nơi khác. Biết được cấu trúc trong Go, điều này cực kỳ ý nghĩa, nó cũng cho phép Read và Write hoạt động độc lập với nhau, điều này là một điểm cộng. 
+
+## Testing
+
+Golang cũng cấp cho chúng ta một package để test đó là _testing_. Cung cấp các phương thức để chạy các bộ thử nghiệm. Các cờ -v, -short được xử dụng với _go test_ để hooked vào chính bản thân nó, người sử dụng có thể tự định nghĩa các hàm test của mình tùy thuộc vào mục đích nếu các cờ trên xuất hiện. 
+
+Một ví dụ của việc viết test trong Go
+
+```
+import "fmt"
+
+func main() {
+  return fmt.Println(helloWorld())
+}
+
+func helloWorld() string{
+  return fmt.Sprintf("Hello world")
+}
+
+import (
+  "testing"
+  "fmt"
+)
+
+func TestHelloWorld(t *testing.T) {
+  if testing.Short() {
+    t.Skip("Short test suite, skipping test.")
+  }
+
+  if testing.Verbose() {
+    fmt.Println("About to test helloWorld()...")
+  }
+
+  exp := "Hello world"
+  got := helloWorld()
+  if exp != got {
+    t.Errorf("Expected %s, got %s", exp, got)
+  }
+}
+```
+
+Trong ví dụ trên, bạn có thể nhìn thấy, package testing đã expose ra 2 phương thức test đó là testing.Short() và testing.Verbose(), có thể dùng để  testing logic, bạn có thể xử dụng chúng như sau:
+
+```
+go test -short
+go test -v
+
+```
+
+Mặc dù đáy chỉ là tính năng nhỏ, nhưng nó cho phép các lập trình viên kiểm soát rõ ràng hơn với bộ test của họ
+
+
